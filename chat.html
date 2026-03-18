@@ -134,6 +134,18 @@
             color: rgba(228, 238, 244, 0.65);
         }
 
+        .sidebar-logout {
+            display: inline-block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #38bdf8;
+            text-decoration: none;
+        }
+
+        .sidebar-logout:hover {
+            text-decoration: underline;
+        }
+
         /* Content area: top bar + main row */
         .content-area {
             flex: 1;
@@ -599,10 +611,11 @@
             <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>Settings</span></a>
         </nav>
         <div class="sidebar-footer">
-            <img class="user-avatar" src="assets/avatar.png" alt="" width="48" height="48">
+            <img class="user-avatar" src="../../assets/avatar.png" alt="" width="48" height="48">
             <div class="user-info">
-                <div class="user-name">You</div>
-                <div class="user-role">user@example.com</div>
+                <div class="user-name" id="sidebarUserName">You</div>
+                <div class="user-role" id="sidebarUserRole">user@example.com</div>
+                <a href="back-end/logout.php" class="sidebar-logout">Log out</a>
             </div>
         </div>
     </aside>
@@ -636,7 +649,7 @@
         </div>
         <div class="conv-items">
             <div class="conv-item active">
-                <img class="conv-avatar" src="assets/avatar.png" alt="" width="42" height="42">
+                <img class="conv-avatar" src="../../assets/avatar.png" alt="" width="42" height="42">
                 <div class="conv-content">
                     <div class="conv-name">Ahmed</div>
                     <div class="conv-preview" id="convPreview">No messages yet</div>
@@ -649,7 +662,7 @@
     <main class="chat-main">
         <header class="chat-header">
             <div class="chat-header-avatar-wrap">
-                <img src="assets/avatar.png" alt="" width="48" height="48">
+                <img src="../../assets/avatar.png" alt="" width="48" height="48">
                 <span class="avatar-online"></span>
             </div>
             <div class="chat-header-info">
@@ -690,6 +703,22 @@ const convTime = document.getElementById('convTime');
 
 let currentUserName = localStorage.getItem('chatty_name') || 'Anonymous';
 
+async function initUser() {
+    try {
+        const res = await fetch('back-end/apis/api_me.php');
+        const data = await res.json();
+        if (data.loggedIn && data.name) {
+            currentUserName = data.name;
+            const nameEl = document.getElementById('sidebarUserName');
+            const roleEl = document.getElementById('sidebarUserRole');
+            if (nameEl) nameEl.textContent = data.name;
+            if (roleEl) roleEl.textContent = data.email || 'Logged in';
+        }
+    } catch (e) {
+        console.error('Could not load user', e);
+    }
+}
+
 function escapeHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -707,13 +736,19 @@ function formatTime(dateStr) {
 
 async function loadMessages() {
     try {
-        const res = await fetch('back-end/api_messages.php');
+        const res = await fetch('back-end/apis/api_messages.php');
         const data = await res.json();
+
+        if (!res.ok) {
+            if (res.status === 401) window.location.href = 'login.php';
+            return;
+        }
+        const list = Array.isArray(data) ? data : [];
 
         messagesContainer.innerHTML = '';
 
         let lastMsg = null;
-        data.forEach(msg => {
+        list.forEach(msg => {
             lastMsg = msg;
             const isSelf = msg.name === currentUserName;
             const row = document.createElement('div');
@@ -777,15 +812,22 @@ form.addEventListener('submit', async (e) => {
     formData.append('name', currentUserName);
     formData.append('message', message);
 
-    await fetch('back-end/api_send.php', { method: 'POST', body: formData });
+    const sendRes = await fetch('back-end/apis/api_send.php', { method: 'POST', body: formData });
+    if (sendRes.status === 401) {
+        window.location.href = 'login.php';
+        return;
+    }
 
     messageInput.value = '';
     messageInput.focus();
     await loadMessages();
 });
 
-loadMessages();
-setInterval(loadMessages, 5000);
+(async function init() {
+    await initUser();
+    await loadMessages();
+    setInterval(loadMessages, 5000);
+})();
 </script>
 </body>
 </html>
