@@ -1,10 +1,11 @@
 const messagesContainer = document.getElementById('chatMessages');
 const form = document.getElementById('chatForm');
 const messageInput = document.getElementById('messageInput');
-const convPreview = document.getElementById('convPreview');
-const convTime = document.getElementById('convTime');
+const conversationItems = document.getElementById('conversationItems');
+const activeBotName = document.getElementById('activeBotName');
 
 let currentUserName = localStorage.getItem('chatty_name') || 'Anonymous';
+let activeConversationId = 0;
 
 async function initUser() {
     try {
@@ -37,9 +38,81 @@ function formatTime(dateStr) {
     return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ampm;
 }
 
-async function loadMessages() {
+function renderConversations(conversations) {
+    if (!conversationItems) return;
+    conversationItems.innerHTML = '';
+
+    conversations.forEach((c) => {
+        const item = document.createElement('div');
+        item.className = 'conv-item' + (c.id === activeConversationId ? ' active' : '');
+        item.dataset.conversationId = String(c.id);
+
+        const img = document.createElement('img');
+        img.className = 'conv-avatar';
+        img.src = '../../assets/avatar.png';
+        img.alt = '';
+        img.width = 42;
+        img.height = 42;
+
+        const content = document.createElement('div');
+        content.className = 'conv-content';
+
+        const name = document.createElement('div');
+        name.className = 'conv-name';
+        name.textContent = c.bot?.name || c.title || 'Conversation';
+
+        const preview = document.createElement('div');
+        preview.className = 'conv-preview';
+        preview.textContent = c.last_message
+            ? (c.last_message.length > 40 ? c.last_message.slice(0, 37) + '...' : c.last_message)
+            : 'No messages yet';
+        preview.dataset.previewFor = String(c.id);
+
+        content.appendChild(name);
+        content.appendChild(preview);
+
+        const time = document.createElement('div');
+        time.className = 'conv-time';
+        time.textContent = c.last_message_at ? formatTime(c.last_message_at) : '-';
+        time.dataset.timeFor = String(c.id);
+
+        item.appendChild(img);
+        item.appendChild(content);
+        item.appendChild(time);
+
+        item.addEventListener('click', async () => {
+            activeConversationId = c.id;
+            if (activeBotName) activeBotName.textContent = c.bot?.name || 'Chat';
+            renderConversations(conversations);
+            await loadMessages(activeConversationId);
+        });
+
+        conversationItems.appendChild(item);
+    });
+}
+
+async function loadConversations() {
+    const res = await fetch('../../back-end/apis/api_conversations.php');
+    const data = await res.json();
+    if (!res.ok) {
+        if (res.status === 401) window.location.href = '../html/login.html';
+        return [];
+    }
+    const list = Array.isArray(data) ? data : [];
+    if (list.length > 0 && activeConversationId === 0) {
+        activeConversationId = list[0].id;
+        if (activeBotName) activeBotName.textContent = list[0]?.bot?.name || 'Chat';
+    }
+    renderConversations(list);
+    return list;
+}
+
+async function loadMessages(conversationId = activeConversationId) {
     try {
-        const res = await fetch('../../back-end/apis/api_messages.php');
+        const url = new URL('../../back-end/apis/api_messages.php', window.location.href);
+        if (conversationId) url.searchParams.set('conversation_id', String(conversationId));
+
+        const res = await fetch(url.toString());
         const data = await res.json();
 
         if (!res.ok) {
@@ -95,9 +168,11 @@ async function loadMessages() {
             messagesContainer.appendChild(row);
         });
 
-        if (lastMsg) {
-            convPreview.textContent = lastMsg.message.length > 40 ? lastMsg.message.slice(0, 37) + '...' : lastMsg.message;
-            convTime.textContent = formatTime(lastMsg.created_at);
+        if (lastMsg && conversationId) {
+            const previewEl = document.querySelector(`[data-preview-for="${conversationId}"]`);
+            const timeEl = document.querySelector(`[data-time-for="${conversationId}"]`);
+            if (previewEl) previewEl.textContent = lastMsg.message.length > 40 ? lastMsg.message.slice(0, 37) + '...' : lastMsg.message;
+            if (timeEl) timeEl.textContent = formatTime(lastMsg.created_at);
         }
 
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -114,6 +189,7 @@ form.addEventListener('submit', async (e) => {
     const formData = new FormData();
     formData.append('name', currentUserName);
     formData.append('message', message);
+    if (activeConversationId) formData.append('conversation_id', String(activeConversationId));
 
     const sendRes = await fetch('../../back-end/apis/api_send.php', { method: 'POST', body: formData });
     if (sendRes.status === 401) {
@@ -123,12 +199,13 @@ form.addEventListener('submit', async (e) => {
 
     messageInput.value = '';
     messageInput.focus();
-    await loadMessages();
+    await loadMessages(activeConversationId);
 });
 
 (async function init() {
     await initUser();
-    await loadMessages();
-    setInterval(loadMessages, 5000);
+    await loadConversations();
+    await loadMessages(activeConversationId);
+    setInterval(() => loadMessages(activeConversationId), 5000);
 })();
 

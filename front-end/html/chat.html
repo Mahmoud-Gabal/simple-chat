@@ -55,16 +55,7 @@
                 <input type="text" placeholder="Search" disabled>
             </div>
         </div>
-        <div class="conv-items">
-            <div class="conv-item active">
-                <img class="conv-avatar" src="../../assets/avatar.png" alt="" width="42" height="42">
-                <div class="conv-content">
-                    <div class="conv-name">Ahmed</div>
-                    <div class="conv-preview" id="convPreview">No messages yet</div>
-                </div>
-                <div class="conv-time" id="convTime">-</div>
-            </div>
-        </div>
+        <div class="conv-items" id="conversationItems"></div>
     </section>
 
     <main class="chat-main">
@@ -74,7 +65,7 @@
                 <span class="avatar-online"></span>
             </div>
             <div class="chat-header-info">
-                <div class="chat-header-name">Ahmed</div>
+                <div class="chat-header-name" id="activeBotName">Ahmed</div>
                 <div class="chat-header-status">Online now</div>
             </div>
         </header>
